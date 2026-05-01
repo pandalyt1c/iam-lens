@@ -45,3 +45,7 @@ next-env.d.ts
 
 # Local strategy documents (not for repo)
 docs/
+
+# Workspace-only briefs synced via Google Drive (not source code)
+*.docx
+/files.zip
