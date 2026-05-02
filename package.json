@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy": "next build && wrangler pages deploy out --project-name iam-lens"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -36,6 +37,7 @@
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "4.1.5"
+    "vitest": "4.1.5",
+    "wrangler": "^4.86.0"
   }
 }
