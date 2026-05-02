@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# cloudflare wrangler
+/.wrangler/
+
 # production
 /build
 
@@ -42,3 +45,10 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Local strategy documents (not for repo)
+docs/
+
+# Workspace-only briefs synced via Google Drive (not source code)
+*.docx
+/files.zip
