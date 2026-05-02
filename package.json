@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "next build && wrangler pages deploy out --project-name iam-lens"
+    "deploy": "next build && wrangler pages deploy out --project-name iam-lens --branch main"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
