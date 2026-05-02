@@ -128,3 +128,54 @@
     @apply font-sans;
   }
 }
+
+.react-flow__node.rf-principal,
+.react-flow__node.rf-stmt-allow,
+.react-flow__node.rf-stmt-deny,
+.react-flow__node.rf-action,
+.react-flow__node.rf-resource {
+  width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  border: 1px solid;
+}
+
+.react-flow__node.rf-principal {
+  background: oklch(0.27 0.03 250);
+  border-color: oklch(0.55 0.04 250);
+  color: oklch(0.95 0 0);
+}
+
+.react-flow__node.rf-stmt-allow {
+  background: oklch(0.32 0.09 155);
+  border-color: oklch(0.65 0.18 155);
+  color: oklch(0.98 0 0);
+  font-weight: 600;
+}
+
+.react-flow__node.rf-stmt-deny {
+  background: oklch(0.32 0.12 25);
+  border-color: oklch(0.65 0.22 25);
+  color: oklch(0.98 0 0);
+  font-weight: 600;
+}
+
+.react-flow__node.rf-action {
+  background: oklch(0.22 0.02 260);
+  border-color: oklch(0.45 0.02 260);
+  color: oklch(0.95 0 0);
+}
+
+.react-flow__node.rf-resource {
+  background: oklch(0.27 0.08 285);
+  border-color: oklch(0.55 0.15 285);
+  color: oklch(0.95 0 0);
+}
+
+.react-flow__node.rf-wildcard {
+  background: oklch(0.32 0.13 60);
+  border-color: oklch(0.7 0.18 60);
+  color: oklch(0.98 0 0);
+}

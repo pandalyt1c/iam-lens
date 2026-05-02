@@ -25,6 +25,7 @@ import {
   type ParsedPolicy,
   type ParseError,
 } from "@/lib/parser";
+import { PolicyGraph } from "@/components/PolicyGraph";
 
 type AnalysisState =
   | { status: "idle" }
@@ -142,6 +143,23 @@ export default function Home() {
               <CardTitle>Plain English</CardTitle>
               <CardDescription>{analysis.summary}</CardDescription>
             </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <GitBranch
+                className="size-5 text-muted-foreground"
+                aria-hidden
+              />
+              <CardTitle>Visual Graph</CardTitle>
+              <CardDescription>
+                Principals → statements → actions → resources. Drag nodes to
+                rearrange.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PolicyGraph policy={analysis.policy} />
+            </CardContent>
           </Card>
 
           <Card>
