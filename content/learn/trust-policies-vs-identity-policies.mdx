@@ -1,0 +1,61 @@
+---
+title: "Trust policies vs. identity policies"
+description: "AWS uses the same JSON syntax for two completely different documents. Confusing them is how engineers accidentally make roles assumable by the wrong principals."
+date: "2026-04-22"
+tags: ["trust-policy", "fundamentals", "roles"]
+---
+
+Every IAM role has two policy documents. They look identical — same Version, same Statement array, same Effect/Action/Resource shape — but they answer different questions.
+
+## Identity policies answer: "what can this role do?"
+
+Attached to the role itself (or to users and groups). They define the permissions the role grants once it's been assumed. An identity policy lists Actions and Resources, and usually has no Principal block — the principal is implicit (whoever holds the role).
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::reports/*"
+}
+```
+
+## Trust policies answer: "who can assume this role?"
+
+Stored as the role's `AssumeRolePolicyDocument`. The Action is always `sts:AssumeRole` (or one of its variants), the Principal block is *required*, and the Resource block is omitted — the resource is the role itself.
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "Service": "lambda.amazonaws.com" },
+  "Action": "sts:AssumeRole"
+}
+```
+
+This trust policy says: the Lambda service can assume this role. Nothing else.
+
+## The mistake
+
+The two documents are interchangeable in syntax but not in meaning. If you put a trust-policy-shaped document on the identity side, the role has no permissions. If you put an identity-policy-shaped document on the trust side, AWS will reject it (or worse — accept it with a permissive Principal you didn't mean).
+
+A common error: pasting a cross-account access policy into the trust policy slot, ending up with `"Principal": { "AWS": "*" }`. That's a publicly-assumable role. Anyone with an AWS account can call `sts:AssumeRole` against it.
+
+## Cross-account trust, the right way
+
+For cross-account trust, the Principal should be the specific account or role, and you should add an `sts:ExternalId` condition if the trust is for a third-party vendor:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::222233334444:root" },
+  "Action": "sts:AssumeRole",
+  "Condition": {
+    "StringEquals": {
+      "sts:ExternalId": "shared-secret-token"
+    }
+  }
+}
+```
+
+The ExternalId is the canonical defense against the [confused-deputy problem](https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html).
+
+Paste a role's trust policy into [IAM Lens](/) — it auto-detects trust policies and produces a one-line summary of who can assume the role.

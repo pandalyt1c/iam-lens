@@ -1,0 +1,62 @@
+---
+title: "Service Control Policies (SCPs), demystified"
+description: "SCPs are guardrails for an entire AWS organization. They don't grant permissions — they cap what's possible, even for root."
+date: "2026-04-16"
+tags: ["scp", "organizations", "guardrails"]
+---
+
+A Service Control Policy is a JSON document attached to an Organizational Unit (OU) or account in AWS Organizations. It bounds what every principal in that OU can do — including the root user. SCPs don't grant anything; they only restrict.
+
+## How they fit in evaluation
+
+SCPs apply *before* identity and resource policies. If an SCP denies an action, no policy below it can re-grant it. If an SCP doesn't permit an action, the action is denied even with an explicit Allow elsewhere.
+
+The most common SCP shape is `FullAWSAccess` (allow everything) plus a small set of explicit Denies:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BaselineAllow",
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyNonApprovedRegions",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": ["us-east-1", "us-west-2"]
+        }
+      }
+    }
+  ]
+}
+```
+
+This SCP allows everything by default, then carves out a region restriction. The DenyNonApprovedRegions statement is impossible to override — even an account admin can't operate outside `us-east-1` or `us-west-2`.
+
+## The guardrails worth deploying day one
+
+1. **Region allowlist.** Most orgs run in 1–3 regions. Deny actions in others to prevent accidental fan-out and reduce blast radius.
+2. **Block leaving the org.** Deny `organizations:LeaveOrganization` so an account can't be detached without org-admin action.
+3. **Block root user actions** (where possible). Conditions like `aws:PrincipalArn` matching the root principal can prevent specific actions from being run as root.
+4. **Block disabling CloudTrail / Config / GuardDuty.** Deny the specific Stop/Delete/Disable actions on these audit services so a compromised admin can't go dark.
+5. **Require MFA for sensitive actions.** Deny IAM mutations when `aws:MultiFactorAuthPresent` is `false`.
+
+## What SCPs can't do
+
+- They can't grant permissions. SCPs only restrict.
+- They don't apply to the management account. The management account in an organization is exempt from SCPs — keep it small.
+- They don't apply to service-linked roles. AWS uses SLRs internally for things like Auto Scaling; SCPs let those bypass.
+- They don't propagate across organizations. Each org has its own SCPs.
+
+## Testing an SCP before attaching
+
+The SCP simulator in the Organizations console lets you test an SCP against a specific principal and action without attaching it. Use it. SCPs that look fine on paper often deny actions that the principal needs in ways that aren't obvious from the JSON.
+
+[IAM Lens](/) treats SCPs as identity-policy-shaped JSON for parsing purposes, so you can paste any SCP in to visualize the Allow/Deny statements and the conditions that gate them.

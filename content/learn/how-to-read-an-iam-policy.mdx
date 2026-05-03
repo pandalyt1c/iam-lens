@@ -1,0 +1,72 @@
+---
+title: "How to read an IAM policy"
+description: "A field guide to the JSON. Five fields do almost all the work — once you know what each one means and how they interact, the rest is mostly memorization."
+date: "2026-04-10"
+tags: ["fundamentals", "syntax"]
+---
+
+An IAM policy is a JSON document that answers one question: should this request be allowed? AWS evaluates the policy by walking each Statement, checking whether the request matches, and combining the results.
+
+Here's the anatomy.
+
+## Version
+
+```json
+"Version": "2012-10-17"
+```
+
+Always `2012-10-17` for any policy you write today. The older `2008-10-17` value disables policy variables (like `${aws:username}`) and shouldn't be used.
+
+## Statement
+
+An array of statements, each evaluated independently. A request is denied unless at least one statement Allows it — and any explicit Deny wins regardless.
+
+## Effect
+
+`"Allow"` or `"Deny"`. Deny statements take precedence over Allow statements anywhere in the evaluation chain. This is how guardrails work — a permissive Allow at the role level can be overridden by a Deny in a Service Control Policy or a permissions boundary.
+
+## Action
+
+What the principal is trying to do. Always namespaced as `service:Operation`:
+
+```json
+"Action": ["s3:GetObject", "s3:ListBucket"]
+```
+
+You can use `*` as a wildcard, including `s3:*` for all S3 actions or `*` for everything. Wildcards in Action are the single most common over-permission.
+
+## Resource
+
+What the action operates on. AWS uses ARNs:
+
+```json
+"Resource": "arn:aws:s3:::reports/*"
+```
+
+Some actions don't support resource-level permissions (most `Describe*` calls). For those, AWS requires `"Resource": "*"`. The IAM console will tell you which is which when you build a policy interactively.
+
+## Principal (resource policies only)
+
+Identity policies omit Principal — it's implied (the user or role the policy is attached to). Resource policies (S3 bucket policies, KMS key policies, role trust policies) require it:
+
+```json
+"Principal": { "AWS": "arn:aws:iam::222233334444:root" }
+```
+
+`"Principal": "*"` makes the resource public.
+
+## Condition
+
+Optional, but the most underused field. Restricts when the statement applies:
+
+```json
+"Condition": {
+  "StringEquals": { "aws:PrincipalOrgID": "o-abcd1234" }
+}
+```
+
+This statement only grants access if the calling principal belongs to your AWS organization. Conditions are the difference between "anyone with our account ID" and "only our roles, only over TLS, only from our VPC."
+
+## Putting it together
+
+Paste any policy into [IAM Lens](/) and it'll annotate every field, summarize the intent in plain English, and flag the patterns that usually go wrong.

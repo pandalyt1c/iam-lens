@@ -11,6 +11,15 @@ const expectations: Record<string, string[]> = {
   "deny-without-mfa": ["MFA", "guardrail"],
   "admin-full-access": ["administrator", "review"],
   "iam-passrole-wildcard": ["IAM role", "EC2", "escalation"],
+  "dynamodb-table-readwrite": ["allows", "action"],
+  "secretsmanager-read-one-secret": ["allows", "action"],
+  "cloudwatch-logs-lambda": ["allows", "action"],
+  "kms-decrypt-scoped": ["allows", "action"],
+  "s3-deny-insecure-transport": ["denies"],
+  "cross-account-assume-role-external-id": ["Trust policy", "222233334444"],
+  "sqs-consumer": ["allows", "action"],
+  "self-manage-credentials": ["allows", "action"],
+  "iam-attach-any-policy": ["IAM", "across the account"],
 };
 
 describe("summarize() — fixture summaries mention key terms", () => {

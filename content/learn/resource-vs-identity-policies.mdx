@@ -1,0 +1,66 @@
+---
+title: "Resource policies vs identity policies"
+description: "Same JSON syntax, different semantics, attached in different places. Knowing which kind you're writing changes how you should think about Principal and Resource."
+date: "2026-04-21"
+tags: ["fundamentals", "resource-policy"]
+---
+
+IAM has two flavors of policy that look identical and aren't.
+
+## Identity policies
+
+Attached to a user, group, or role. They say what *that identity* can do.
+
+- Principal field is **omitted** (it's implicit — whoever holds the identity)
+- Resource field lists the ARNs the identity can act on
+- Most IAM policies you write are identity policies
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::reports/*"
+}
+```
+
+## Resource policies
+
+Attached to a resource. They say who can do what *to that resource*.
+
+- Principal field is **required**
+- Resource field is sometimes omitted (the resource is itself)
+- Common examples: S3 bucket policies, KMS key policies, IAM role trust policies, SQS queue policies, Secrets Manager secret policies
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::222233334444:root" },
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::shared-data/*"
+}
+```
+
+## Why both exist
+
+Same-account access can be granted by either. If your role has `s3:GetObject` on a bucket in the same account, no bucket policy is needed.
+
+Cross-account access needs **both**. The accessing account's identity policy must allow the action, AND the bucket policy must explicitly allow the accessing principal. Either alone is insufficient — AWS calls this the "double opt-in."
+
+## When to use a resource policy
+
+- **Cross-account access.** Required for the resource side of the double opt-in.
+- **Public resources.** S3 buckets serving a public website use a bucket policy with `Principal: "*"`.
+- **Service-to-service access.** Letting CloudFront read from S3, or letting Lambda be invoked by API Gateway, often goes through resource policies.
+- **Trust policies.** Every IAM role has a resource policy — its trust policy — that defines who can assume it.
+
+## The subtle one: KMS key policies
+
+KMS is unusual. By default, the only thing that can use a KMS key is the principals listed in its key policy. An identity policy granting `kms:Decrypt` on a key does nothing unless the key policy *also* allows it.
+
+The standard pattern is to put a broad `"AWS": "arn:aws:iam::123456789012:root"` Allow in the key policy, which delegates access control back to identity policies. Without that line, identity policies are powerless against the key.
+
+This is why "I have kms:Decrypt in my role policy but I'm getting AccessDenied" is one of the most-asked AWS questions. The answer is almost always: the key policy doesn't trust your account.
+
+## In IAM Lens
+
+[IAM Lens](/) auto-detects whether you've pasted an identity or resource policy based on whether Principal is present. The summary and graph adjust accordingly — trust policies, bucket policies, and identity policies all get distinct rendering.

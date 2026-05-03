@@ -1,0 +1,73 @@
+---
+title: "Reading CloudTrail to debug AccessDenied"
+description: "AWS error messages don't tell you why a request was denied. CloudTrail does — if you know which fields to read."
+date: "2026-04-30"
+tags: ["cloudtrail", "debugging", "audit"]
+---
+
+When IAM denies a request, the API returns an `AccessDenied` error and rarely explains why. The full reason lives in CloudTrail, in fields most engineers don't know to look for.
+
+## The fields that matter
+
+A CloudTrail event for a denied API call includes:
+
+- **`errorCode`** — usually `AccessDenied` or `Client.UnauthorizedOperation` (for EC2)
+- **`errorMessage`** — sometimes specific, often generic
+- **`userIdentity`** — who made the call (account ID, principal ARN, session context)
+- **`eventName`** — which API call (e.g., `GetObject`)
+- **`resources`** — the ARNs the call was against
+- **`requestParameters`** — input the principal sent
+- **`additionalEventData`** — service-specific extras; for S3 this often includes the bucket and key
+- **`sourceIPAddress`** and **`userAgent`** — origin
+
+The ones most engineers miss: `userIdentity.sessionContext` and `userIdentity.invokedBy`. These tell you which session the call came from (relevant for assumed roles) and whether AWS itself triggered it (relevant for service-linked roles).
+
+## Athena query for AccessDenied in the last 24h
+
+If you have CloudTrail logs landing in S3 and Athena set up over them:
+
+```sql
+SELECT
+  eventTime,
+  eventName,
+  userIdentity.arn AS principal,
+  errorMessage,
+  json_extract_scalar(requestParameters, '$.bucketName') AS bucket
+FROM cloudtrail_logs
+WHERE eventTime > current_timestamp - interval '1' day
+  AND errorCode IN ('AccessDenied', 'Client.UnauthorizedOperation')
+ORDER BY eventTime DESC
+LIMIT 100;
+```
+
+This is the single most useful query for diagnosing IAM friction. Run it weekly; the pattern of who's getting denied tells you which roles are over-scoped or under-scoped.
+
+## Reading the error message
+
+`AccessDenied` errors come in three flavors, and the message tells you which:
+
+1. **`User: arn:... is not authorized to perform: s3:GetObject on resource: ...`** — straightforward identity-policy denial.
+2. **`User: arn:... is not authorized to perform: s3:GetObject on resource: ... with an explicit deny in a service control policy`** — SCP denial. The fix is at the org level.
+3. **`User: arn:... is not authorized to perform: s3:GetObject on resource: ... with an explicit deny in a permissions boundary`** — boundary denial. The fix is to widen the boundary.
+
+If the message names "service control policy" or "permissions boundary," skip the role's identity policy — the problem is upstream.
+
+## When CloudTrail is silent
+
+A handful of denials don't make it to CloudTrail:
+
+- Some `s3:GetObject` 403s on objects that don't exist
+- Console UI errors that never reach an actual API
+- Errors from AWS-internal flows the user didn't initiate
+
+For these, fall back to enabling S3 server access logs (for S3) or the service's own logging.
+
+## Workflow for an AccessDenied report
+
+1. Get the principal ARN, action, and resource ARN from the user.
+2. Pull the CloudTrail event for the failing call. Confirm the error code and message.
+3. If the message mentions SCP or boundary, fix at that level.
+4. Otherwise, paste the role's identity policy into [IAM Lens](/). Confirm whether the action is granted on that resource.
+5. If granted but still failing, check resource policies (S3 bucket policy, KMS key policy) on the target.
+
+Most "weird IAM bugs" turn out to be one of the three layers refusing — once you can read CloudTrail, the answer is usually one query away.

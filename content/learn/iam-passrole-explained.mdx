@@ -1,0 +1,52 @@
+---
+title: "iam:PassRole, explained"
+description: "PassRole is the most-misunderstood IAM action. It looks innocuous, it's required for almost every serverless workflow, and it's the entry point to a whole class of privilege-escalation attacks."
+date: "2026-04-18"
+tags: ["passrole", "privilege-escalation", "fundamentals"]
+---
+
+`iam:PassRole` is the permission that lets a principal hand a role to an AWS service. When you launch an EC2 instance with an instance profile, run an ECS task with a task role, or create a Lambda function with an execution role — you're using `iam:PassRole`.
+
+It feels like plumbing. It is, in fact, one of the most security-relevant actions in IAM.
+
+## Why it matters
+
+If a principal can pass *any* role to *any* service, they can effectively escalate to whatever those roles can do. Concretely:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["iam:PassRole", "ec2:RunInstances"],
+  "Resource": "*"
+}
+```
+
+This policy lets the principal launch an EC2 instance with the AdministratorAccess role attached, SSH in (or use SSM), and inherit admin. They didn't need `iam:*` — they just needed PassRole on `*` plus one service that consumes the role.
+
+This is a classic privilege-escalation primitive, documented by Rhino Security Labs and reproduced in CTFs, internal red-team exercises, and the wild for years.
+
+## The right way to write it
+
+Two rules cover most cases:
+
+1. **Scope `Resource` to specific role ARNs.** Never `"*"`. The role you're passing should be enumerable: `arn:aws:iam::123456789012:role/lambda-process-orders`.
+2. **Add a `iam:PassedToService` condition** so the role can only be handed to the specific service that needs it.
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "iam:PassRole",
+  "Resource": "arn:aws:iam::123456789012:role/lambda-process-orders",
+  "Condition": {
+    "StringEquals": {
+      "iam:PassedToService": "lambda.amazonaws.com"
+    }
+  }
+}
+```
+
+Now the principal can only pass *that role* to *Lambda*. Even if they had `ec2:RunInstances`, they couldn't use this role to launch an instance.
+
+## Detecting it in your account
+
+Run [IAM Lens](/) on any policy that includes `iam:PassRole`. The risk engine flags wildcard resources on PassRole as a high-severity finding by default.

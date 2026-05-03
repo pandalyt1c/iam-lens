@@ -1,8 +1,10 @@
 export { parse } from "./parse";
 export { summarize } from "./summary";
 export { examples } from "./examples";
+export { analyze } from "./analyze";
 
 export type { PolicyExample, ExampleCategory } from "./examples";
+export type { RiskFlag, RiskSeverity } from "./analyze";
 
 export type {
   Effect,
