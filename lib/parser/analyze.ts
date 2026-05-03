@@ -137,16 +137,18 @@ export function analyze(policy: ParsedPolicy): RiskFlag[] {
       });
     }
 
-    for (const sensitive of SENSITIVE_REQUIRES_CONDITION) {
-      if (s.actions.some((a) => actionMatches(a, sensitive)) && noConditions) {
-        flags.push({
-          id: `sensitive-no-condition-${sensitive}-${i}`,
-          severity: "high",
-          title: `${sensitive} without conditions`,
-          detail: `${sensitive} is a known privilege-escalation vector and should be gated by a Condition (e.g. iam:PassedToService, aws:SourceArn).`,
-          statementIndex: i,
-          fix: "Add a Condition restricting which roles or services may use this action.",
-        });
+    if (!wildcardAction) {
+      for (const sensitive of SENSITIVE_REQUIRES_CONDITION) {
+        if (s.actions.some((a) => actionMatches(a, sensitive)) && noConditions) {
+          flags.push({
+            id: `sensitive-no-condition-${sensitive}-${i}`,
+            severity: "high",
+            title: `${sensitive} without conditions`,
+            detail: `${sensitive} is a known privilege-escalation vector and should be gated by a Condition (e.g. iam:PassedToService, aws:SourceArn).`,
+            statementIndex: i,
+            fix: "Add a Condition restricting which roles or services may use this action.",
+          });
+        }
       }
     }
 
