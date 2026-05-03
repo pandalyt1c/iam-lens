@@ -1,0 +1,32 @@
+---
+title: "Why IAM wildcards are dangerous"
+description: "The * character in an IAM policy is a productivity tool that quietly grants more access than most engineers realize. Here's how to spot it and what to do instead."
+date: "2026-04-15"
+tags: ["wildcards", "least-privilege", "fundamentals"]
+---
+
+The single most common mistake in AWS IAM policies is the wildcard. It shows up in three places — `Action`, `Resource`, and `Principal` — and each one fails differently.
+
+## Wildcards in Action
+
+`"Action": "*"` allows every API call, including services that didn't exist when you wrote the policy. AWS launches new services constantly, and they inherit your wildcards by default. A role with `Action: "*"` written in 2020 has access to Bedrock, Q, and every service shipped since.
+
+The slightly less obvious version is `"Action": "s3:*"`. This is "scoped" only in the sense that it's bounded to one service — but S3 has over 100 actions, including `s3:DeleteBucket`, `s3:PutBucketPolicy`, and `s3:DeleteObjectVersion`. If your app only needs to read objects, `s3:GetObject` is the answer.
+
+## Wildcards in Resource
+
+`"Resource": "*"` is sometimes unavoidable — actions like `ec2:DescribeInstances` don't support resource-level permissions. But for the actions that do (most of S3, DynamoDB, Lambda, Secrets Manager), a wildcard resource means the listed actions apply to every resource in the account.
+
+This is how cross-tenant data leaks happen. A role intended to read Tenant A's data ends up able to read Tenant B's because the resource was `"*"` instead of `arn:aws:s3:::tenant-a-data/*`.
+
+## Wildcards in Principal
+
+`"Principal": "*"` on a resource policy makes that resource public to the internet. This is sometimes intentional (a public S3 website) but is far more often a mistake. Pair any wildcard principal with a `Condition` block that restricts the source — `aws:SourceVpc`, `aws:SourceArn`, or at minimum `aws:SecureTransport`.
+
+## What to do instead
+
+1. **Start with the smallest possible permission and expand only when you hit an error.** If the app fails calling `s3:GetObject`, add that — not `s3:*`.
+2. **Scope every Resource ARN** unless the action genuinely doesn't support resource-level permissions. The IAM console will tell you which is which.
+3. **Use Conditions as a second line of defense.** `aws:SourceVpc`, `aws:PrincipalOrgID`, and `aws:SecureTransport` all add meaningful constraints.
+
+Paste your policy into [IAM Lens](/) and we'll flag every wildcard in seconds.

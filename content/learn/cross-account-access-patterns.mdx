@@ -1,0 +1,85 @@
+---
+title: "Cross-account access: four patterns and when to use each"
+description: "Cross-account in AWS can mean four different things. Picking the wrong pattern leads to either a security gap or weeks of debugging trust policies."
+date: "2026-04-27"
+tags: ["cross-account", "patterns", "trust-policy"]
+---
+
+"Cross-account access" is overloaded. It might mean an IAM Identity Center user in one account accessing resources in another. It might mean a role in account A assuming a role in account B. It might mean a third-party SaaS reading your S3. These need different patterns.
+
+## Pattern 1: Cross-account role assumption (within your org)
+
+Most common. You have a tooling account and a workload account, both in the same AWS Organization. A pipeline in tooling needs to deploy into workload.
+
+```json
+// Trust policy on the role in the workload account
+{
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::TOOLING_ACCOUNT:role/DeployerRole"
+  },
+  "Action": "sts:AssumeRole",
+  "Condition": {
+    "StringEquals": {
+      "aws:PrincipalOrgID": "o-abcd1234"
+    }
+  }
+}
+```
+
+The Principal narrows to a specific role; the `aws:PrincipalOrgID` condition is belt-and-suspenders in case the account ARN changes or the role gets recreated.
+
+## Pattern 2: Third-party vendor assume-role
+
+A SaaS vendor (a SIEM, a backup tool, a Slack integration) needs to read your AWS resources. They give you their account ID and an ExternalId.
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::VENDOR_ACCOUNT:root" },
+  "Action": "sts:AssumeRole",
+  "Condition": {
+    "StringEquals": {
+      "sts:ExternalId": "the-token-the-vendor-gave-you"
+    }
+  }
+}
+```
+
+The ExternalId is the canonical defense against the [confused-deputy problem](https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html). Without it, any of the vendor's customers could trick the vendor into assuming your role. Always require ExternalId on third-party trust.
+
+## Pattern 3: Cross-account resource sharing (S3, KMS, SQS)
+
+Service-specific. The resource lives in one account; principals from another need to access it. Use a resource policy on the resource itself.
+
+```json
+// Bucket policy on the S3 bucket in account A
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::ACCOUNT_B:role/Reader" },
+  "Action": ["s3:GetObject", "s3:ListBucket"],
+  "Resource": [
+    "arn:aws:s3:::shared-bucket",
+    "arn:aws:s3:::shared-bucket/*"
+  ]
+}
+```
+
+The accessing role in account B *also* needs an identity policy granting the same actions. This is the double opt-in mentioned in the [resource vs identity policies](/learn/resource-vs-identity-policies) article.
+
+## Pattern 4: AWS RAM (Resource Access Manager)
+
+For sharing AWS resources that don't have a resource policy of their own — VPC subnets, Transit Gateways, Route 53 Resolver rules. You share via the Resource Access Manager API and the receiving account accesses them as if they were local.
+
+RAM doesn't need IAM policies; it's a separate sharing primitive. Use it for shared networking and skip the IAM dance entirely.
+
+## A decision tree
+
+- **Sharing data via S3 / SNS / SQS / KMS?** Resource policy (Pattern 3).
+- **Same org, role assumption?** Pattern 1 with `aws:PrincipalOrgID`.
+- **Third-party SaaS?** Pattern 2 with ExternalId.
+- **Sharing networking?** Pattern 4 (RAM).
+
+The wrong pattern usually still works, just less safely. Sharing data via cross-account assume-role instead of a resource policy means the accessing account has full role-level credentials in your environment. A resource policy is strictly less powerful.
+
+[IAM Lens](/) renders cross-account principals distinctly in the graph — you can see at a glance which other accounts a policy delegates to.

@@ -13,9 +13,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IAM Lens — AWS IAM Policy Visualizer",
+  metadataBase: new URL("https://iamlens.dev"),
+  title: {
+    default: "IAM Lens — AWS IAM Policy Visualizer",
+    template: "%s",
+  },
   description:
     "Turn AWS IAM policies into visual clarity. Paste a policy and see a graph, plain-English summary, and risk flags.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "IAM Lens — AWS IAM Policy Visualizer",
+    description:
+      "Turn AWS IAM policies into visual clarity. Paste a policy and see a graph, plain-English summary, and risk flags.",
+    url: "https://iamlens.dev",
+    siteName: "IAM Lens",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "IAM Lens — AWS IAM Policy Visualizer",
+    description:
+      "Turn AWS IAM policies into visual clarity. Free, client-side, no signup.",
+  },
 };
 
 export default function RootLayout({

@@ -134,12 +134,20 @@
 .react-flow__node.rf-stmt-deny,
 .react-flow__node.rf-action,
 .react-flow__node.rf-resource {
-  width: 220px;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
+  line-height: 1.35;
   font-family: var(--font-mono, ui-monospace, monospace);
   border: 1px solid;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .react-flow__node.rf-principal {
@@ -172,6 +180,49 @@
   background: oklch(0.27 0.08 285);
   border-color: oklch(0.55 0.15 285);
   color: oklch(0.95 0 0);
+}
+
+.learn-article h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 1.5rem;
+}
+.learn-article h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 1rem;
+}
+.learn-article p {
+  color: var(--foreground);
+}
+.learn-article a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.learn-article ol,
+.learn-article ul {
+  padding-left: 1.5rem;
+  list-style: revert;
+}
+.learn-article code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875em;
+  background: var(--muted);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+.learn-article pre {
+  background: var(--muted);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+.learn-article pre code {
+  background: transparent;
+  padding: 0;
 }
 
 .react-flow__node.rf-wildcard {

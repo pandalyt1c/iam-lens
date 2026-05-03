@@ -1,0 +1,54 @@
+---
+title: "Permission boundaries: the IAM ceiling"
+description: "Permission boundaries cap what an identity can do, regardless of which policies are attached. They're how you safely delegate IAM creation to other engineers."
+date: "2026-04-19"
+tags: ["permission-boundaries", "delegation", "advanced"]
+---
+
+A permission boundary is an IAM policy attached to a user or role that defines the maximum permissions that identity can have. It doesn't grant anything — it caps what attached identity policies can grant.
+
+## The use case that justifies it
+
+You want your platform team to let product engineers create their own IAM roles for their services. But you don't want them to create AdministratorAccess roles. Without boundaries, you'd have to gatekeep every role creation manually.
+
+With boundaries: you give engineers `iam:CreateRole` and `iam:AttachRolePolicy`, but require that any role they create has a specific permission boundary attached. The boundary lists everything they're allowed to grant — typically a curated set of "safe" actions.
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["iam:CreateRole", "iam:PutRolePolicy"],
+  "Resource": "*",
+  "Condition": {
+    "StringEquals": {
+      "iam:PermissionsBoundary": "arn:aws:iam::123456789012:policy/EngineerBoundary"
+    }
+  }
+}
+```
+
+Now engineers can self-serve role creation, but every role they create is bounded. Even if they attach AdministratorAccess to it, the role's effective permissions are the intersection of AdministratorAccess and EngineerBoundary.
+
+## Boundary vs. SCP
+
+Both restrict. The difference is scope:
+
+| | SCP | Permission Boundary |
+|---|---|---|
+| Attached to | OU or account | Single user or role |
+| Set by | Org admin | Account admin |
+| Affects | Every principal in scope | One principal |
+| Use case | Org-wide guardrails | Per-identity ceiling |
+
+Use SCPs for "no one in the org can do X." Use boundaries for "this specific team can only do Y."
+
+## The non-obvious behavior
+
+A permission boundary is **only** consulted for the identity it's attached to. If Role A has a boundary but Role A assumes Role B, Role B's boundary is what applies once it's assumed — not Role A's.
+
+This means a boundary doesn't prevent a principal from assuming a more permissive role. If your boundary needs to be transitive, you also need to deny `sts:AssumeRole` to roles outside the bounded set, or scope-down via session policies on assume.
+
+## A common mistake
+
+Engineers see "permissions boundary" in the IAM console and think it's the way to grant fewer permissions. It isn't. To grant fewer permissions, attach a more restrictive identity policy. A boundary's value is specifically that it's harder to remove than an identity policy — it's a structural ceiling, set once when the role is created, and altering it usually requires elevated privileges.
+
+[IAM Lens](/) renders boundary policies the same way it renders identity policies. The interesting analysis is comparing what an identity policy *grants* against what the boundary *permits* — the effective permissions are the intersection.

@@ -1,0 +1,54 @@
+---
+title: "Allow vs Deny: how IAM evaluation actually works"
+description: "Deny always wins — but the order in which AWS checks SCPs, permission boundaries, identity policies, and resource policies determines whether a request gets there at all."
+date: "2026-04-12"
+tags: ["fundamentals", "evaluation", "deny"]
+---
+
+The single most important rule in IAM evaluation: **an explicit Deny anywhere overrides any Allow.** But that's a simplification. The full picture has six checks, evaluated in a specific order, and a missing Allow at any level is enough to fail the request.
+
+## The evaluation order
+
+For a request to succeed, all of the following must be true:
+
+1. **No explicit Deny** in any policy that applies to the request
+2. **An explicit Allow** in at least one of: identity policy, resource policy, session policy
+3. **The action is permitted** by every Service Control Policy (SCP) above the principal in the org tree
+4. **The action is permitted** by the principal's permissions boundary, if one is set
+5. **For cross-account requests**, both accounts' policies must Allow
+
+If any check fails, the request is denied. AWS calls this "default deny" — silence at any layer is interpreted as no.
+
+## Where Allow and Deny live
+
+| Policy type | Effect of "no policy" | Use case |
+|-------------|----------------------|----------|
+| Identity policy | Default deny | What this user/role can do |
+| Resource policy | Default deny | Who can access this resource |
+| Session policy | Default deny | Temporary scope-down for an STS session |
+| Permissions boundary | Default deny | Maximum permissions for this principal |
+| Service Control Policy | Default allow* | Org-level guardrails |
+
+*SCPs default to allowing everything, but most orgs attach a baseline SCP that denies dangerous actions.
+
+## The non-obvious cases
+
+**Same-account, identity policy alone is enough.** If your role has `s3:GetObject` on a bucket in the same account, you don't need a bucket policy. Either policy can grant access.
+
+**Cross-account, you need both.** To access an S3 bucket in another account, your role's identity policy must Allow it AND the bucket's resource policy must Allow your role. Either alone is insufficient.
+
+**Permission boundaries are a ceiling, not a floor.** A boundary doesn't grant anything — it caps what identity policies can grant. If the boundary doesn't include `s3:*`, no identity policy attached to that role can grant S3 access.
+
+**SCPs apply to root, too.** Even the account root user is bounded by SCPs. This is the only thing that can constrain root.
+
+## Why explicit Deny matters
+
+Use explicit Deny for guardrails you never want overridden:
+
+- "Deny everything outside us-east-1 and us-west-2"
+- "Deny S3 access without TLS"
+- "Deny actions when MFA is not present"
+
+These statements survive policy churn. Even if someone attaches AdministratorAccess by mistake, the Deny still applies.
+
+[IAM Lens](/) flags Allow + NotAction patterns specifically because they're easy to misread — Allow + NotAction grants everything *except* the listed actions, which is rarely what people intend.

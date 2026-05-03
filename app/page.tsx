@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,25 +21,55 @@ import {
 import {
   parse,
   summarize,
+  analyze,
   examples,
   type ParsedPolicy,
   type ParseError,
+  type RiskFlag,
 } from "@/lib/parser";
 import { PolicyGraph } from "@/components/PolicyGraph";
+import { RiskFlags } from "@/components/RiskFlags";
+import { ExamplesPicker } from "@/components/ExamplesPicker";
+import { buildShareUrl, readPolicyFromUrl } from "@/lib/share";
 
 type AnalysisState =
   | { status: "idle" }
-  | { status: "ok"; policy: ParsedPolicy; summary: string }
+  | {
+      status: "ok";
+      policy: ParsedPolicy;
+      summary: string;
+      flags: RiskFlag[];
+    }
   | { status: "error"; error: ParseError };
 
 export default function Home() {
   const [input, setInput] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
-
-  const exampleOptions = useMemo(
-    () => examples.map((e) => ({ slug: e.slug, title: e.title })),
-    [],
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">(
+    "idle",
   );
+
+  useEffect(() => {
+    const fromUrl = readPolicyFromUrl();
+    if (fromUrl) {
+      setInput(fromUrl);
+      runAnalysis(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function copyShareLink() {
+    try {
+      const url = buildShareUrl(input);
+      await navigator.clipboard.writeText(url);
+      window.history.replaceState(null, "", url);
+      setShareStatus("copied");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    } catch {
+      setShareStatus("error");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    }
+  }
 
   function runAnalysis(text: string) {
     const result = parse(text);
@@ -51,6 +81,7 @@ export default function Home() {
       status: "ok",
       policy: result.policy,
       summary: summarize(result.policy),
+      flags: analyze(result.policy),
     });
   }
 
@@ -83,19 +114,7 @@ export default function Home() {
           >
             Policy JSON
           </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Try an example:</span>
-            {exampleOptions.slice(0, 4).map((opt) => (
-              <Button
-                key={opt.slug}
-                size="sm"
-                variant="outline"
-                onClick={() => loadExample(opt.slug)}
-              >
-                {opt.title}
-              </Button>
-            ))}
-          </div>
+          <ExamplesPicker onPick={loadExample} />
         </div>
 
         <Textarea
@@ -109,13 +128,29 @@ export default function Home() {
           <p className="text-xs text-muted-foreground">
             Nothing leaves your browser — parsing runs locally.
           </p>
-          <Button
-            size="lg"
-            disabled={input.trim().length === 0}
-            onClick={() => runAnalysis(input)}
-          >
-            Analyze Policy
-          </Button>
+          <div className="flex items-center gap-2">
+            {analysis.status === "ok" && (
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={copyShareLink}
+                disabled={input.trim().length === 0}
+              >
+                {shareStatus === "copied"
+                  ? "Link copied"
+                  : shareStatus === "error"
+                    ? "Copy failed"
+                    : "Share link"}
+              </Button>
+            )}
+            <Button
+              size="lg"
+              disabled={input.trim().length === 0}
+              onClick={() => runAnalysis(input)}
+            >
+              Analyze Policy
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -161,6 +196,8 @@ export default function Home() {
               <PolicyGraph policy={analysis.policy} />
             </CardContent>
           </Card>
+
+          <RiskFlags flags={analysis.flags} />
 
           <Card>
             <CardHeader>

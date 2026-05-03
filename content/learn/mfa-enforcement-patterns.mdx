@@ -1,0 +1,86 @@
+---
+title: "MFA enforcement patterns that actually work"
+description: "There are three ways to require MFA in AWS IAM. Two of them are commonly recommended and only one of them works the way most people expect."
+date: "2026-04-23"
+tags: ["mfa", "security", "patterns"]
+---
+
+Requiring MFA sounds simple: add `aws:MultiFactorAuthPresent` to a Condition. The complication is that this key behaves differently across long-term credentials, federated sessions, and assume-role chains.
+
+## Pattern 1: Deny everything unless MFA
+
+Attach this to the user (or group):
+
+```json
+{
+  "Sid": "DenyAllExceptListedIfNoMFA",
+  "Effect": "Deny",
+  "NotAction": [
+    "iam:CreateVirtualMFADevice",
+    "iam:EnableMFADevice",
+    "iam:GetUser",
+    "iam:ListMFADevices",
+    "iam:ListVirtualMFADevices",
+    "iam:ResyncMFADevice",
+    "sts:GetSessionToken"
+  ],
+  "Resource": "*",
+  "Condition": {
+    "BoolIfExists": {
+      "aws:MultiFactorAuthPresent": "false"
+    }
+  }
+}
+```
+
+The carve-out is necessary so users can register an MFA device for the first time without already having one. `BoolIfExists` is necessary because `aws:MultiFactorAuthPresent` is absent for some session types — without `IfExists`, the condition would skip the Deny entirely for those sessions.
+
+## Pattern 2: Require MFA on assume-role
+
+Put this in the role's trust policy:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::123456789012:root" },
+  "Action": "sts:AssumeRole",
+  "Condition": {
+    "Bool": { "aws:MultiFactorAuthPresent": "true" }
+  }
+}
+```
+
+The user can only assume this role if they authenticated with MFA when they got their session credentials. Because MFA presence is sticky on STS sessions, this also covers any subsequent re-assumes within the chain.
+
+## Pattern 3: Per-action MFA via aws:MultiFactorAuthAge
+
+```json
+{
+  "Effect": "Deny",
+  "Action": "iam:DeleteRole",
+  "Resource": "*",
+  "Condition": {
+    "NumericGreaterThanIfExists": {
+      "aws:MultiFactorAuthAge": "3600"
+    }
+  }
+}
+```
+
+This denies dangerous actions if MFA was authenticated more than an hour ago, forcing a fresh MFA prompt for sensitive operations. It's the IAM equivalent of "this action requires re-authentication."
+
+## The traps
+
+**Service-linked roles.** SLRs are exempt from MFA conditions. AWS uses them for things like Auto Scaling — you can't (and shouldn't) require MFA on them.
+
+**Federated sessions.** SAML and OIDC sessions may or may not surface MFA presence depending on how the IdP is configured. Test before assuming the condition fires.
+
+**The console.** Console sessions count as MFA-authenticated if the user logged in with MFA. CLI sessions need `aws sts get-session-token` with `--serial-number` and `--token-code` to mark the session as MFA'd.
+
+## What I'd actually deploy
+
+- Pattern 1 on every IAM user (and forbid IAM users where possible)
+- Pattern 2 on every role used by humans
+- Pattern 3 on the actions you most want to gate (IAM mutations, KMS key deletion, CloudTrail/Config disablement)
+
+[IAM Lens](/) flags policies that mention `iam:MultiFactorAuthPresent` without `IfExists` — a common mistake that makes the policy silently ineffective for sessions where the key isn't set.

@@ -1,0 +1,62 @@
+---
+title: "10 IAM privilege escalation paths to know"
+description: "Most privilege escalation in AWS doesn't require iam:* — it requires one specific action plus a service that consumes roles. Here are the patterns to grep your policies for."
+date: "2026-04-25"
+tags: ["privilege-escalation", "security", "audit"]
+---
+
+Most discussion of IAM privilege escalation focuses on the obvious case: `iam:*` on everything. The interesting cases are the ones that escalate without ever touching `iam:CreatePolicy` or `iam:AttachUserPolicy` directly.
+
+Rhino Security Labs published the canonical list in 2018 and it's largely still accurate. Here are the ten that come up most often.
+
+## 1. iam:CreateAccessKey on another user
+
+Create access keys for a more privileged user. Now you have their permissions.
+
+## 2. iam:CreateLoginProfile on another user
+
+Set a console password for a user who doesn't have one. Combined with iam:UpdateLoginProfile, you can log in as them.
+
+## 3. iam:UpdateLoginProfile on another user
+
+Change a user's console password and log in as them.
+
+## 4. iam:AttachUserPolicy / iam:AttachRolePolicy / iam:AttachGroupPolicy
+
+Attach AdministratorAccess (or any other managed policy) to yourself, your role, or a group you're in.
+
+## 5. iam:PutUserPolicy / iam:PutRolePolicy / iam:PutGroupPolicy
+
+Same as above, but for inline policies. Often forgotten by allowlists that only block the Attach variants.
+
+## 6. iam:CreatePolicyVersion + iam:SetDefaultPolicyVersion
+
+Update an existing customer-managed policy to be more permissive, then set that version as default. Useful when an existing policy is attached to your role but you can't modify the role itself.
+
+## 7. iam:PassRole + ec2:RunInstances
+
+Launch an EC2 instance with an attached instance profile that has more privileges than you. SSH or SSM in and inherit them.
+
+## 8. iam:PassRole + lambda:CreateFunction + lambda:InvokeFunction
+
+Create a Lambda with a more-privileged execution role, invoke it, exfiltrate the credentials it sees in its environment.
+
+## 9. iam:PassRole + glue:CreateDevEndpoint (or sagemaker:CreateNotebookInstance)
+
+Same shape as #7 and #8 but with services that give you a managed shell. Glue dev endpoints and SageMaker notebooks are popular because they're easy to overlook in audits.
+
+## 10. iam:UpdateAssumeRolePolicy
+
+Modify a role's trust policy to allow your principal to assume it. Now you can assume any role you can edit the trust policy of.
+
+## How to defend
+
+Detection is easier than prevention because most of these actions have legitimate uses.
+
+- **Block `iam:*` from human roles by default.** Carve out specific actions per role rather than granting `iam:*`.
+- **Scope `iam:PassRole` Resource to specific role ARNs.** Never `*`. Add a `iam:PassedToService` condition.
+- **Use a permission boundary** on every role engineers can create or modify. Even if they grant themselves more permissions, the boundary caps the effective set.
+- **Alert on suspicious patterns** in CloudTrail: `CreateAccessKey` on a user that isn't yourself, `PutRolePolicy` outside known automation, `UpdateAssumeRolePolicy` outside change windows.
+- **Enable Access Analyzer** to surface roles assumable by external principals.
+
+[IAM Lens](/) flags every action in this list as a high-severity finding when paired with a wildcard Resource or no Condition block.

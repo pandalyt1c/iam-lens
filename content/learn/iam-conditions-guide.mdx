@@ -1,0 +1,76 @@
+---
+title: "IAM Conditions: the field that does the heavy lifting"
+description: "Most over-permissioned roles became dangerous the moment someone removed a Condition block. Here are the conditions that actually matter and how to use them."
+date: "2026-04-14"
+tags: ["conditions", "fundamentals", "least-privilege"]
+---
+
+The Condition block is what separates "anyone in our account" from "only our CI role, only from GitHub Actions, only over TLS, only against tagged resources." Without it, IAM is binary. With it, IAM becomes contextual.
+
+## The structure
+
+```json
+"Condition": {
+  "StringEquals": {
+    "aws:PrincipalOrgID": "o-abcd1234"
+  }
+}
+```
+
+Three nested layers: **operator** → **key** → **value(s)**. The statement only applies if every condition in the block evaluates true.
+
+## The operators that matter
+
+- `StringEquals` / `StringNotEquals` — exact string match
+- `StringLike` — wildcards (`*`, `?`)
+- `Bool` — for boolean keys like `aws:SecureTransport` or `aws:MultiFactorAuthPresent`
+- `IpAddress` / `NotIpAddress` — CIDR matching for `aws:SourceIp`
+- `ArnEquals` / `ArnLike` — ARN-shape comparisons
+- `DateGreaterThan` / `DateLessThan` — for time-bounded grants
+
+Each operator has an `IfExists` variant (e.g., `StringEqualsIfExists`) that applies only when the key is present. Useful when the condition key isn't always populated.
+
+## The keys you'll use most
+
+**`aws:SourceIp`** — restrict to a CIDR range. Pair with `IpAddress` operator.
+
+**`aws:SourceVpc` / `aws:SourceVpce`** — restrict to a specific VPC or VPC endpoint. Strictly stronger than `SourceIp` for AWS-internal traffic.
+
+**`aws:PrincipalOrgID`** — only principals from your AWS organization. The right way to scope cross-account trust within your own org.
+
+**`aws:PrincipalTag/<Tag>`** — only principals with a specific tag. Powers attribute-based access control (ABAC).
+
+**`aws:ResourceTag/<Tag>`** — only resources with a specific tag. Pairs with PrincipalTag for ABAC.
+
+**`aws:SecureTransport`** — request used HTTPS. Use with `Bool: false` in a Deny statement to enforce TLS.
+
+**`aws:MultiFactorAuthPresent`** — caller authenticated with MFA. The cornerstone of MFA-enforcement guardrails.
+
+**`aws:RequestedRegion`** — region the API call targeted. Pair with `StringNotEquals` in a Deny to enforce region allowlists.
+
+**`sts:ExternalId`** — required external identifier for cross-account assume-role. The canonical defense against the confused-deputy problem.
+
+**`iam:PassedToService`** — for `iam:PassRole`, restricts which service the role can be passed to.
+
+**`kms:ViaService`** — for KMS, restricts which service can use the key. Crucial for keys you only want S3 to invoke.
+
+## A practical pattern: scope-down by tag
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "ec2:StopInstances",
+  "Resource": "*",
+  "Condition": {
+    "StringEquals": {
+      "aws:ResourceTag/Environment": "dev"
+    }
+  }
+}
+```
+
+The principal can stop any EC2 instance — but only ones tagged `Environment=dev`. Production instances are untouchable, even though the Resource is `*`.
+
+This is why a wildcard Resource is sometimes safe: a strong Condition narrows the scope better than an ARN list ever could.
+
+[IAM Lens](/) shows every Condition in the visual graph and surfaces statements where a Condition would meaningfully reduce blast radius.

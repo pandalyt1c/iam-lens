@@ -1,0 +1,57 @@
+---
+title: "Auditing IAM with AWS IAM Access Analyzer"
+description: "Access Analyzer is the free AWS service that finds resources shared outside your account or org. It's the first thing to enable on a new account and the last thing most teams remember to check."
+date: "2026-04-29"
+tags: ["audit", "access-analyzer", "tooling"]
+---
+
+IAM Access Analyzer is one of the most useful AWS services that almost nobody enables on day one. It's free for the basic findings, runs continuously, and answers a question that's hard to answer manually: which of my resources are accessible from outside my account?
+
+## What it actually checks
+
+Access Analyzer evaluates the resource policies on the supported services and reports any that grant access to external principals. Today the supported list includes:
+
+- S3 buckets
+- IAM roles (trust policies)
+- KMS keys
+- Lambda functions and layers
+- SQS queues
+- Secrets Manager secrets
+- EBS volume snapshots
+- ECR repositories
+- RDS DB snapshots and cluster snapshots
+- EFS file systems
+- DynamoDB streams and tables
+- SNS topics
+
+For each resource, it walks the policy and asks: "is there any principal outside my zone of trust who can access this?" Zone of trust defaults to the account, but you can scope it to your AWS Organization, which is usually what you want.
+
+## What "external" means
+
+By default, Access Analyzer flags any access from outside your account. If you operate in an org, change the analyzer's zone of trust to the org — otherwise legitimate cross-account access within your own org will spam findings.
+
+External principals can be:
+- AWS account IDs not in your zone
+- Specific IAM users or roles in other accounts
+- The wildcard `*` (public access)
+- Federated identities outside your control
+- AWS services (when not constrained by Conditions)
+
+## The findings worth acting on first
+
+1. **Public S3 buckets that shouldn't be public.** Bucket policy with `Principal: "*"` or unrestricted ACL.
+2. **Roles trusted by accounts you don't recognize.** Anyone outside your org assuming roles in your account is a yellow flag.
+3. **KMS keys with cross-account decrypt.** Especially keys protecting databases or backups.
+4. **Secrets Manager secrets shared cross-account.** Often a leftover from a migration.
+
+## What it doesn't catch
+
+Access Analyzer evaluates resource policies. It does **not** evaluate identity policies. If your IAM user has `s3:*` on `*`, that's an identity-policy problem and Access Analyzer is silent on it.
+
+For identity policies, the related tool is **IAM Access Advisor** — per-role, it shows which services the role has actually used in the last N days. Use it to find unused permissions and prune them.
+
+## Pairing with IAM Lens
+
+Access Analyzer tells you which resources are exposed. [IAM Lens](/) tells you what a specific policy actually grants when you paste it in. Use them together: triage a finding in Access Analyzer, paste the offending policy into IAM Lens, see the graph and risk flags, ship a tightened replacement.
+
+Both are free. Both are client-side or AWS-native. There's no excuse for either being absent from a production AWS account.
