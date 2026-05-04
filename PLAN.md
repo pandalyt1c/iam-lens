@@ -66,7 +66,7 @@ export type TrustorKind =
   | "ExternalAccount"   // arn:aws:iam::OTHER_ACCOUNT:root or :role/X
   | "SameAccount"       // arn:aws:iam::SELF:root (rarely useful but legal)
   | "Federated"         // arn:aws:iam::ACCT:saml-provider/X or oidc-provider/X
-  | "Public"            // Principal: "*" (the disaster case)
+  | "Public"            // Principal: "*" OR Principal: { "AWS": "*" } (the disaster case)
   | "CanonicalUser";    // S3 legacy
 
 export interface Trustor {
@@ -86,6 +86,14 @@ export interface ParsedPolicy {
   trustors: Trustor[];  // Empty array if not a trust policy
 }
 ```
+
+### Public principal — both forms treated identically
+
+The classifier MUST treat both of these as `"Public"`:
+- `"Principal": "*"` (shorthand)
+- `"Principal": { "AWS": "*" }` (long-form, semantically identical)
+
+Add explicit unit tests for both forms.
 
 ### Service principal display mapping
 
@@ -111,18 +119,42 @@ cloudformation.amazonaws.com -> "AWS CloudFormation"
 - Cross-account trust without ExternalId yields 1 Trustor of kind `"ExternalAccount"`, `hasExternalId: false`
 - SAML federation trust yields 1 Trustor of kind `"Federated"`
 - `Principal: "*"` yields 1 Trustor of kind `"Public"`
+- `Principal: { "AWS": "*" }` ALSO yields 1 Trustor of kind `"Public"` (identical handling)
 
 ---
 
-## Phase 3 — Trust Graph Visual Rendering
+## Phase 3 — Trust Graph Visual Rendering + Context Banner
 
-**Files touched:** new `components/TrustGraph.tsx`, modified `app/page.tsx`
+**Files touched:** new `components/TrustGraph.tsx`, new `components/PolicyTypeBanner.tsx`, modified `app/page.tsx`
 
-### Rendering strategy
+### Visual distinction strategy (Open Question 1 — RESOLVED)
 
-When `parsedPolicy.policyType === "trust"`, render `TrustGraph` instead of `PolicyGraph`. Both components live side-by-side in `app/page.tsx` with a conditional swap.
+The Trust Graph and Policy Graph are deliberately distinct so users instantly know which view they're in:
 
-### Layout sketch (left to right):
+| | Policy Graph (identity/resource) | Trust Graph (trust) |
+|---|---|---|
+| Layout direction | Left → right (statements → actions → resources) | Left → right BUT with explicit "Role" node in the middle |
+| Primary node icon | `FileJson` for statements | `KeyRound` for trustors, `Shield` for the role |
+| Edge labels | "→" minimal | Verbal: "is trusted by", "can assume", etc. |
+| Color palette | Greens/oranges (allow/deny) | Blues/purples/oranges/reds (trustor classification) |
+| Banner above graph | "This is an identity policy — it controls what an IAM user/role can do" | "This is a trust policy — it controls WHO can assume this role" |
+
+The banner alone makes the policy type unmistakable on first glance.
+
+### Context Banner component (Open Question 3 — RESOLVED)
+
+Create `components/PolicyTypeBanner.tsx` — a small, dismissible info banner shown above the graph:
+
+| `policyType` | Banner text |
+|---|---|
+| `"trust"` | "This is a trust policy — it controls WHO can assume this role." |
+| `"identity"` | "This is an identity policy — it controls what an IAM user, group, or role can do." |
+| `"resource"` | "This is a resource policy — it controls who can do what to a specific AWS resource (S3 bucket, KMS key, etc.)." |
+| `"unknown"` | (no banner — silent fallback) |
+
+Style: subtle, low-contrast background, small icon, one line of text, optional dismiss button (state can be ephemeral, no need to persist). Goal is gentle education for first-time users without nagging power users.
+
+### Trust Graph layout
 [Trustor Node]  ──trusts──▶  [This Role Node]  ──can──▶  [Action Nodes]
 (one per                     (the role being         (sts:AssumeRole, etc.,
 Trustor)                     defined)                from the trust statements)
@@ -147,8 +179,9 @@ Trustor)                     defined)                from the trust statements)
 
 ### Acceptance criteria
 
-- Lambda trust policy renders as `[AWS Lambda] → [This Role] → [sts:AssumeRole]`
+- Lambda trust policy renders as `[AWS Lambda] → [This Role] → [sts:AssumeRole]` with the trust banner above
 - Cross-account trust renders with the external account ID visible on the trustor node
+- The PolicyTypeBanner correctly identifies all 4 policy types (or stays silent for "unknown")
 - Toggling between the new TrustGraph and the original PolicyGraph based on `policyType` works for all 17 example policies without breaking
 - Pinch-zoom and drag still work on mobile (preserve React Flow controls)
 
@@ -166,10 +199,10 @@ Trustor)                     defined)                from the trust statements)
 **Detail:** `External AWS account {accountId} can assume this role with no ExternalId or PrincipalOrgID condition. This is the classic "confused deputy" vulnerability — any other customer of that vendor could trick them into assuming this role.`
 **Fix:** `Add a Condition: { "StringEquals": { "sts:ExternalId": "your-unique-id" } } — or, if both accounts are in your org, use aws:PrincipalOrgID instead.`
 
-### Rule 4.2 — Public trust principal
+### Rule 4.2 — Public trust principal (covers BOTH `"*"` and `{"AWS":"*"}` forms)
 
 **Severity:** `critical`
-**Fires when:** policy is a trust policy AND a Trustor of kind `Public`
+**Fires when:** policy is a trust policy AND a Trustor of kind `Public` (regardless of which syntax form was used)
 **Title:** `Public trust principal`
 **Detail:** `Principal: "*" on a trust policy means anyone on the internet who knows the role ARN can assume it. This is almost certainly a test pattern that was never replaced with a real principal.`
 **Fix:** `Replace Principal: "*" with the specific AWS account, service, or federated identity that should be allowed to assume this role.`
@@ -195,9 +228,10 @@ Distinguishing "human" from "machine" cross-account access is imperfect. Heurist
 - Rule 4.1 does NOT fire when ExternalId is present
 - Rule 4.1 does NOT fire when `aws:PrincipalOrgID` is present
 - Rule 4.2 fires on `Principal: "*"` trust policy
+- Rule 4.2 ALSO fires on `Principal: { "AWS": "*" }` trust policy (long-form must be flagged identically)
 - Rule 4.3 fires on cross-account trust pointing at `:root` with no MFA condition
 - Rule 4.3 does NOT fire on service-principal trust (Lambda, EC2)
-- All three rules tested in `analyze.test.ts` with positive and negative cases
+- All three rules tested in `analyze.test.ts` with positive and negative cases for each variant
 
 ---
 
@@ -241,8 +275,8 @@ Each example becomes a teaching moment in the demo flow.
 | Phase | Description | Est. Time |
 |---|---|---|
 | 1 | Trust policy detection | 1–2 hr |
-| 2 | Trustor extraction | 1–2 hr |
-| 3 | Trust Graph rendering | 2–3 hr |
+| 2 | Trustor extraction (incl. dual public-principal handling) | 1–2 hr |
+| 3 | Trust Graph rendering + Context Banner component | 2–3 hr |
 | 4 | Three new risk rules | 1–2 hr |
 | 5 | Six new examples | 30 min – 1 hr |
 | 6 | Backward compat verification | 30 min |
@@ -255,8 +289,8 @@ Each example becomes a teaching moment in the demo flow.
 - Deploy via existing `npm run deploy` Cloudflare Pages flow
 - Announce as "v1.1 update" in a Reddit + X post 7–10 days after Show HN, riding leftover launch attention
 
-## Open Questions to Resolve Before Coding
+## Resolved Decisions (Open Questions Closed 2026-05-03)
 
-1. Should the Trust Graph and Policy Graph be visually distinct enough that a user immediately knows which view they're in, or should the transition be subtle (same component, different node colors)?
-2. For the "test wildcard left in production" risk rule (Rule 4.2), should we also fire it for `Principal: { "AWS": "*" }` (semantically identical but written long-form)? — Yes, treat both as Public.
-3. Do we want a small explanatory banner above the Trust Graph that says "This is a trust policy — it controls WHO can assume this role"? Recommend yes, for first-time users.
+1. **Visual distinction:** Trust Graph and Policy Graph are visually distinct (different layout, different node icons, different node colors). Banner above the graph reinforces the type.
+2. **Public principal long-form:** `Principal: { "AWS": "*" }` is treated identically to `Principal: "*"` — both classified as `Public`, both fire Rule 4.2.
+3. **Explanatory banner:** A small `PolicyTypeBanner` component sits above the graph and explains what kind of policy is being viewed (trust / identity / resource). Silent fallback for `unknown`.
