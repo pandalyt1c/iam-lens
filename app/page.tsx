@@ -95,9 +95,9 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-12 md:py-20">
       <header className="flex flex-col items-start gap-4">
-        <Badge variant="secondary" className="rounded-full">
-          Weekend 2 · parser wired
-        </Badge>
+        <p className="text-sm text-muted-foreground">
+          Free · Client-side · No signup
+        </p>
         <h1 className="font-heading text-4xl font-semibold tracking-tight md:text-5xl">
           IAM Lens
         </h1>

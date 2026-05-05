@@ -12,10 +12,10 @@ It's the first asset in a portfolio of small, AI-built utility websites designed
 
 ## Live Site
 
-- Production URL: https://iamlens.dev (post-deploy)
+- Production URL: https://iamlens.dev
 - Domain registrar: Cloudflare
 - Hosting: Cloudflare Pages
-- Repo: https://github.com/pandalyt1c/iam-lens (private during build)
+- Repo: https://github.com/pandalyt1c/iam-lens
 
 ## Tech Stack
 
@@ -78,12 +78,12 @@ iam-lens/
 - Dark mode default ✓
 - Git initialized, pushed to GitHub ✓
 
-### Weekend 2: Parser + Visualization
-- IAM policy parser (handles all standard syntax)
-- React Flow visualization wired up
-- Plain-English summary generator
-- Wire up the "Analyze Policy" button
-- Deploy to Cloudflare Pages
+### Weekend 2: Parser + Visualization (COMPLETE)
+- IAM policy parser (handles all standard syntax) ✓
+- React Flow visualization wired up ✓
+- Plain-English summary generator ✓
+- Wire up the "Analyze Policy" button ✓
+- Deploy to Cloudflare Pages ✓
 
 ### Weekend 3: Risk Analysis + SEO + Launch Prep
 - Rule-based risk detection
@@ -125,4 +125,4 @@ iam-lens/
 - This file is the source of truth for the build. Update it as architecture decisions evolve.
 - Companion docs in the parent Claude Project: "IAM Lens Project Brief" (broader business context).
 - When in doubt about a decision: defer to the project brief; it has the business reasoning.
-- Last updated: end of Weekend 1 build (April 2026)
+- Last updated: May 4, 2026 — parser wired, all 58 tests pass, build deploys to Cloudflare Pages, site live at iamlens.dev
