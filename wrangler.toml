@@ -1,0 +1,8 @@
+name = "iam-lens"
+compatibility_date = "2025-05-01"
+pages_build_output_dir = "out"
+
+[[kv_namespaces]]
+binding = "SUBSCRIBERS"
+id = "cb67ee170985482590dde0ffb876dd4b"
+preview_id = "36c4253663ea445184572db5f7106264"

@@ -30,6 +30,7 @@ import {
 import { PolicyGraph } from "@/components/PolicyGraph";
 import { RiskFlags } from "@/components/RiskFlags";
 import { ExamplesPicker } from "@/components/ExamplesPicker";
+import { EmailCapture } from "@/components/EmailCapture";
 import { buildShareUrl, readPolicyFromUrl } from "@/lib/share";
 
 type AnalysisState =
@@ -305,6 +306,8 @@ export default function Home() {
           </Card>
         </section>
       )}
+
+      <EmailCapture />
     </main>
   );
 }
