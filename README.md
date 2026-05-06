@@ -4,7 +4,7 @@ Visualize AWS IAM policies in your browser. No backend, no account, no telemetry
 
 🔗 **Live:** [iamlens.dev](https://iamlens.dev)
 
-![IAM Lens screenshot](https://iamlens.dev/opengraph-image)
+![IAM Lens screenshot](https://iamlens.dev/screenshot.png)
 
 ## What it does
 
